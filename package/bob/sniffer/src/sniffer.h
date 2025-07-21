@@ -1,0 +1,25 @@
+#ifndef SNIFFER_H
+#define SNIFFER_H
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <sys/socket.h>
+#include <linux/netlink.h>
+#include <signal.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <errno.h>
+#include <stdbool.h> 
+#include <setjmp.h>
+#include <pthread.h>
+#include <sys/epoll.h>
+#include <fcntl.h>
+#include <time.h>
+
+#define NETLINK_USER 30     //netlink传递数据编号
+#define MAX_PAYLOAD 2048
+
+#endif
