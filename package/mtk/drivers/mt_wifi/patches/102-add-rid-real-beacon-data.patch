@@ -1,0 +1,243 @@
+Index: linux-4.4.198/drivers/net/wireless/mediatek/mt_wifi/embedded/common/bcn.c
+===================================================================
+--- linux-4.4.198.orig/drivers/net/wireless/mediatek/mt_wifi/embedded/common/bcn.c
++++ linux-4.4.198/drivers/net/wireless/mediatek/mt_wifi/embedded/common/bcn.c
+@@ -27,6 +27,8 @@
+ */
+ 
+ #include "rt_config.h"
++#include <linux/sysfs.h>
++#include <linux/mutex.h>
+ 
+ #define MAX_TRANSMIT_POWER 30
+ 
+@@ -254,6 +256,115 @@ INT bcn_buf_deinit(RTMP_ADAPTER *pAd, BC
+ 	return TRUE;
+ }
+ 
++static struct kobject *bcn_kobj;
++static DEFINE_MUTEX(custom_data_lock); // 保护自定义数据的互斥锁
++static UCHAR *custom_beacon_data;      // 动态数据缓冲区
++static size_t data_max_size = 178;     // 最大支持长度 7条消息
++static size_t data_actual_size;        // 实际接收长度
++
++// sysfs show函数（用于使用cat /sys/kernel/bcn/custom_data读取当前自定义数据）
++static ssize_t custom_data_show(struct kobject *kobj, 
++	struct kobj_attribute *attr, 
++	char *buf) 
++{
++	ssize_t len;
++	int chunks, remainder, i;
++    mutex_lock(&custom_data_lock);
++
++	// 首行显示长度信息
++	len += scnprintf(buf + len, PAGE_SIZE - len, "Len:%-3zu\n", data_actual_size + 5);
++	// 计算分块数和余数
++	chunks = (data_actual_size + 5) / 25;
++	remainder = (data_actual_size + 5) % 25;
++
++	// 逐块打印25字节 + 换行
++	for (i = 0; i < chunks; i++) {
++		len += scnprintf(buf + len, PAGE_SIZE - len,
++			"%*ph\n", 
++			25, 
++			&custom_beacon_data[i * 25]);
++		}
++	// 打印剩余字节（如果有）
++    if (remainder > 0) {
++        len += scnprintf(buf + len, PAGE_SIZE - len,
++            "%*ph\n", 
++            remainder, 
++            &custom_beacon_data[chunks * 25]);
++    }
++
++    mutex_unlock(&custom_data_lock);
++    
++    return len;
++}
++
++// sysfs store函数（用于程序发送数据给驱动写入新数据）
++static ssize_t custom_data_store(struct kobject *kobj,
++	 struct kobj_attribute *attr,
++	 const char *buf, 
++	 size_t count)
++{
++	if (count > data_max_size) {
++        printk(KERN_ERR "Data too big (%zu > %zu)\n", count, data_max_size);
++        return -EINVAL;
++    }
++
++    mutex_lock(&custom_data_lock);
++    memset(custom_beacon_data, 0, data_max_size); // 清空旧数据
++    memcpy(&custom_beacon_data[5], buf, count);       // 全量拷贝用户数据
++    data_actual_size = count;                     // 更新实际长度
++	#if 0
++		// 打印接收数据详情
++		printk(KERN_INFO "Received %zu bytes:\n", count);
++		print_hex_dump(KERN_CONT, "[DATA] ", DUMP_PREFIX_OFFSET, 
++						16, 1, buf, count, true);
++	#endif
++    wmb(); // 内存屏障保证写入顺序
++    mutex_unlock(&custom_data_lock);
++    
++    return count;
++}
++
++// 定义sysfs属性
++static struct kobj_attribute custom_data_attr = 
++__ATTR(custom_data, 0644, custom_data_show, custom_data_store);
++
++// Sysfs初始化函数
++int bcn_sysfs_init(void)
++{
++	int ret;
++	// 在/sys/kernel下创建kobject
++	bcn_kobj = kobject_create_and_add("bcn", kernel_kobj);
++	if (!bcn_kobj) {
++	printk(KERN_ERR "unable sysfs kobject\n");
++	return -ENOMEM;
++	}
++
++	// 动态分配内存
++    custom_beacon_data = kzalloc(data_max_size, GFP_KERNEL);
++    if (!custom_beacon_data) {
++        kobject_put(bcn_kobj);
++        return -ENOMEM;
++    }
++
++	// 创建属性文件
++	ret = sysfs_create_file(bcn_kobj, &custom_data_attr.attr);
++	if (ret) {
++	kobject_put(bcn_kobj);
++	printk(KERN_ERR "unable creat file\n");
++	return ret;
++	}
++
++	data_actual_size = 0; // 初始无数据
++
++	return 0;
++}
++
++// 清理函数
++void bcn_sysfs_exit(void)
++{
++	kobject_put(bcn_kobj);
++}
++
+ /*
+     ==========================================================================
+     Description:
+@@ -335,43 +446,33 @@ UINT16 MakeBeacon(RTMP_ADAPTER *pAd, str
+ 	ComposeBcnPktTail(pAd, wdev, &UpdatePos, pBeaconFrame);
+ 	FrameLen = UpdatePos;/* update newest FrameLen. */
+ 	/* 插入自定义的 Beacon 数据 */
+-	static int update = 0;
+-	static int count = 0;
+-	UCHAR custom_beacon_data[33] = {0};
+-	// 固定前3个元素,固定报文
+-	custom_beacon_data[0] = 0xfa;
+-	custom_beacon_data[1] = 0x0b;
+-	custom_beacon_data[2] = 0xbc;
+-	custom_beacon_data[3] = 0x0d;
+-	// 让 custom_beacon_data[4] 自增到 0xFF 后清零
+-	custom_beacon_data[4] = count++;
+-	if (count == 0xFF) {
+-		count = 0;
+-	}
+-	//固定其中两个元素报文
+-	custom_beacon_data[5] = 0xf2;
+-	custom_beacon_data[6] = 0x19;
+-	//目前固定一条消息
+-	custom_beacon_data[7] = 0x01;
+-	//固定id类型
+-	custom_beacon_data[8] = 0x02;
+-	//固定为sn报文
+-	custom_beacon_data[9] = 0x11;
+-	// 目标地址：custom_beacon_data[9]之后的位置
+-			UCHAR *dest = &custom_beacon_data[10];
+-	//填充信息
+-	UCHAR buf[23] = { [0 ... 22] = 0x31 };
+-	memcpy(dest, buf, sizeof(buf));
+-	wmb();  // 写内存屏障
+-	ULONG custom_beacon_len = sizeof(custom_beacon_data);
+-	ULONG TmpLen = 0;
+-	UCHAR VendorIeID = IE_VENDOR_SPECIFIC; // Vendor Specific IE 的 ID 是 0xDD
+-	MakeOutgoingFrame(pBeaconFrame + FrameLen, &TmpLen,
+-	1, &VendorIeID,
+-	1, &custom_beacon_len,
+-	custom_beacon_len, custom_beacon_data,
+-	END_OF_ARGS);
+-	FrameLen += TmpLen;
++	ULONG custom_beacon_len = 0;
++    ULONG TmpLen = 0;
++    static int count = 0;
++    UCHAR *pCustomData = NULL;
++    UCHAR VendorIeID = IE_VENDOR_SPECIFIC;
++
++    mutex_lock(&custom_data_lock);
++    // 固定头部
++    custom_beacon_data[0] = 0xfa;
++    custom_beacon_data[1] = 0x0b;
++    custom_beacon_data[2] = 0xbc;
++    custom_beacon_data[3] = 0x0d;
++    custom_beacon_data[4] = count;
++    count = (count + 1) & 0xFF;
++
++    if (data_actual_size > 0 && custom_beacon_data) {
++        pCustomData = custom_beacon_data;
++        custom_beacon_len = data_actual_size + 5; // 包括5字节头部
++        
++        MakeOutgoingFrame(pBeaconFrame + FrameLen, &TmpLen,
++                          1, &VendorIeID,
++                          1, &custom_beacon_len,
++                          custom_beacon_len, pCustomData,
++                          END_OF_ARGS);
++        FrameLen += TmpLen;
++    }
++    mutex_unlock(&custom_data_lock);
+ 	
+ 	/*end自定义 */
+ 	/* step 6. Since FrameLen may change, update TXWI. */
+Index: linux-4.4.198/drivers/net/wireless/mediatek/mt_wifi/embedded/include/rt_os_net.h
+===================================================================
+--- linux-4.4.198.orig/drivers/net/wireless/mediatek/mt_wifi/embedded/include/rt_os_net.h
++++ linux-4.4.198/drivers/net/wireless/mediatek/mt_wifi/embedded/include/rt_os_net.h
+@@ -822,5 +822,8 @@ INT rt_android_private_command_entry(
+ 	RTMP_COM_IoctlHandle(__pAd, NULL, CMD_RTPRIV_IOCTL_CHECK_EARLYSUSPEND, 0, __flag, 0)
+ #endif /* CONFIG_HAS_EARLYSUSPEND */
+ 
++int bcn_sysfs_init(void);
++void bcn_sysfs_exit(void);
++
+ #endif /* __RT_OS_NET_H__ */
+ 
+Index: linux-4.4.198/drivers/net/wireless/mediatek/mt_wifi/os/linux/rt_main_dev.c
+===================================================================
+--- linux-4.4.198.orig/drivers/net/wireless/mediatek/mt_wifi/os/linux/rt_main_dev.c
++++ linux-4.4.198/drivers/net/wireless/mediatek/mt_wifi/os/linux/rt_main_dev.c
+@@ -229,6 +229,8 @@ int mt_wifi_close(VOID *dev)
+ 	/*system down hook point*/
+ 	WLAN_HOOK_CALL(WLAN_HOOK_SYS_DOWN, pAd, NULL);
+ 
++	bcn_sysfs_exit();
++
+ 	MTWF_LOG(DBG_CAT_INIT, DBG_SUBCAT_ALL, DBG_LVL_TRACE, ("<=== mt_wifi_close\n"));
+ 	return 0;
+ }
+@@ -363,6 +365,16 @@ int mt_wifi_open(VOID *dev)
+ 			 ("Number of Packet Freed in open = %lu\n", OS_NumOfPktFree));
+ #endif /* VENDOR_FEATURE2_SUPPORT */
+ 
++	// 添加sysfs初始化
++    int ret = bcn_sysfs_init();
++    if (ret) {
++        printk(KERN_ERR "BCN sysfs fail\n");
++    }
++	else 
++	{
++		printk(KERN_INFO "BCN sysfs success!\n");
++	}
++
+ #ifdef BB_SOC
+ #ifdef TCSUPPORT_WLAN_SW_RPS
+ 	if (sizeof(RX_BLK) > 150) {

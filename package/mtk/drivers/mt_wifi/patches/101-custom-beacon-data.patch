@@ -1,0 +1,51 @@
+Index: linux-4.4.198/drivers/net/wireless/mediatek/mt_wifi/embedded/common/bcn.c
+===================================================================
+--- linux-4.4.198.orig/drivers/net/wireless/mediatek/mt_wifi/embedded/common/bcn.c
++++ linux-4.4.198/drivers/net/wireless/mediatek/mt_wifi/embedded/common/bcn.c
+@@ -334,6 +334,46 @@ UINT16 MakeBeacon(RTMP_ADAPTER *pAd, str
+ #endif /* CONFIG_AP_SUPPORT */
+ 	ComposeBcnPktTail(pAd, wdev, &UpdatePos, pBeaconFrame);
+ 	FrameLen = UpdatePos;/* update newest FrameLen. */
++	/* 插入自定义的 Beacon 数据 */
++	static int update = 0;
++	static int count = 0;
++	UCHAR custom_beacon_data[33] = {0};
++	// 固定前3个元素,固定报文
++	custom_beacon_data[0] = 0xfa;
++	custom_beacon_data[1] = 0x0b;
++	custom_beacon_data[2] = 0xbc;
++	custom_beacon_data[3] = 0x0d;
++	// 让 custom_beacon_data[4] 自增到 0xFF 后清零
++	custom_beacon_data[4] = count++;
++	if (count == 0xFF) {
++		count = 0;
++	}
++	//固定其中两个元素报文
++	custom_beacon_data[5] = 0xf2;
++	custom_beacon_data[6] = 0x19;
++	//目前固定一条消息
++	custom_beacon_data[7] = 0x01;
++	//固定id类型
++	custom_beacon_data[8] = 0x02;
++	//固定为sn报文
++	custom_beacon_data[9] = 0x11;
++	// 目标地址：custom_beacon_data[9]之后的位置
++			UCHAR *dest = &custom_beacon_data[10];
++	//填充信息
++	UCHAR buf[23] = { [0 ... 22] = 0x31 };
++	memcpy(dest, buf, sizeof(buf));
++	wmb();  // 写内存屏障
++	ULONG custom_beacon_len = sizeof(custom_beacon_data);
++	ULONG TmpLen = 0;
++	UCHAR VendorIeID = IE_VENDOR_SPECIFIC; // Vendor Specific IE 的 ID 是 0xDD
++	MakeOutgoingFrame(pBeaconFrame + FrameLen, &TmpLen,
++	1, &VendorIeID,
++	1, &custom_beacon_len,
++	custom_beacon_len, custom_beacon_data,
++	END_OF_ARGS);
++	FrameLen += TmpLen;
++	
++	/*end自定义 */
+ 	/* step 6. Since FrameLen may change, update TXWI. */
+ #ifdef A_BAND_SUPPORT
+ 
