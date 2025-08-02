@@ -1,0 +1,193 @@
+Index: linux-4.4.198/drivers/net/wireless/mediatek/mt_wifi/embedded/common/cmm_data.c
+===================================================================
+--- linux-4.4.198.orig/drivers/net/wireless/mediatek/mt_wifi/embedded/common/cmm_data.c
++++ linux-4.4.198/drivers/net/wireless/mediatek/mt_wifi/embedded/common/cmm_data.c
+@@ -6204,6 +6204,130 @@ NDIS_STATUS header_packet_process(
+ 	return NDIS_STATUS_SUCCESS;
+ }
+ 
++//netlink 
++#include <linux/netlink.h>
++#include <linux/skbuff.h>
++#include <net/sock.h>
++#include <net/netlink.h>
++// Netlink 消息的协议编号
++#define NETLINK_TEST 30  // 自定义协议号
++static struct sock *nl_sk = NULL;
++static int user_pid = -1;  // 保存用户空间PID
++
++// 发送消息到用户空间
++void send_to_user(const unsigned char *data, size_t len) {
++    struct sk_buff *skb_out;
++    struct nlmsghdr *nlh;
++    if (user_pid == -1) {
++        //printk(KERN_INFO "No registered user\n");
++        return;
++    }
++
++	// 创建消息缓冲区（注意：长度不带字符串终止符）
++	skb_out = nlmsg_new(len, 0); // len为实际二进制数据长度
++	if (!skb_out) {
++		printk(KERN_ERR "Failed to allocate skb\n");
++		return;
++	}
++
++    // 填充消息头
++    nlh = nlmsg_put(skb_out, 0, 0, NLMSG_DONE, len, 0);
++    memcpy(nlmsg_data(nlh), data, len); // 使用memcpy
++
++    // 发送单播消息
++    nlmsg_unicast(nl_sk, skb_out, user_pid);
++}
++
++// 接收用户消息的回调
++static void nl_recv_msg(struct sk_buff *skb) {
++    struct nlmsghdr *nlh = nlmsg_hdr(skb);
++    char *msg = NLMSG_DATA(nlh);
++
++    if (strcmp(msg, "REGISTER") == 0) {  // 处理注册请求
++        user_pid = nlh->nlmsg_pid;       // 记录用户PID
++        printk(KERN_INFO "User registered (PID=%d)\n", user_pid);
++    } else {
++        printk(KERN_INFO "Received unknown cmd: %s\n", msg);
++    }
++}
++
++// 模块初始化
++int nl_init(void) {
++    struct netlink_kernel_cfg cfg = {
++        .input = nl_recv_msg,
++    };
++
++    // 创建Netlink Socket
++    nl_sk = netlink_kernel_create(&init_net, NETLINK_TEST, &cfg);
++    if (!nl_sk) {
++        printk(KERN_ALERT "Error creating socket\n");
++        return -1;
++    }
++
++    printk(KERN_INFO "Kernel module loaded\n");
++    return 0;
++}
++
++// 模块退出
++void  nl_exit(void) {
++
++    netlink_kernel_release(nl_sk); // 释放Socket
++    printk(KERN_INFO "Kernel module unloaded\n");
++}
++//不处理数据
++VOID send_mgmt_data(RTMP_ADAPTER *pAd, RX_BLK *pRxBlk)
++{
++	send_to_user(pRxBlk->pData,pRxBlk->DataSize);
++}
++//beacon数据解析
++VOID parase_mgmt_beacon_data(RTMP_ADAPTER *pAd, RX_BLK *pRxBlk)
++{
++	int i=0, j=0, offset=36;//24+12
++	int length=0;
++	
++	i=offset;
++	while(i < pRxBlk->DataSize){
++		if(pRxBlk->pData[i] == 0xDD){//vendor specific
++			if(pRxBlk->pData[i+2]==0xFA && pRxBlk->pData[i+3]==0x0B && pRxBlk->pData[i+4]==0xBC && pRxBlk->pData[i+5] == 0x0D){//Remote ID
++				length=pRxBlk->pData[i+1];
++				#if 1
++					for (j = 0; j < length; j++) 
++					{
++						printk("%02X ", pRxBlk->pData[j+i]);
++						if ((j + 1) % 25 == 0)  // 每25个换行
++							printk("\n");
++					}
++					if (j % 25 != 0)  // 补最后一个换行
++						printk("\n");
++				#endif
++				//cs_netlink_send(1, length+2, (pRxBlk->pData + i));
++				break;
++			}
++		}			
++		i++;
++	}
++	return ;
++}
++//nan数据解析
++VOID parase_mgmt_nan_data(RTMP_ADAPTER *pAd, RX_BLK *pRxBlk)
++{
++	int i=0, offset=24;//24
++	int length=0;
++	
++	i=offset;
++	while(i < pRxBlk->DataSize){
++		if(pRxBlk->pData[i] == 0x04 && pRxBlk->pData[i+1] == 0x09){//Public Action
++			if(pRxBlk->pData[i+2]==0x50 && pRxBlk->pData[i+3]==0x6F && pRxBlk->pData[i+4]==0x9A && pRxBlk->pData[i+5] == 0x13){
++				length=(pRxBlk->pData[i+7] | pRxBlk->pData[i+8] << 8);
++				//cs_netlink_send(1, length+9, (pRxBlk->pData + i));
++				break;
++			}
++			
++		}			
++		i++;
++	}
++	return ;
++}
+ 
+ NDIS_STATUS rx_packet_process(
+ 	RTMP_ADAPTER *pAd,
+@@ -6314,6 +6438,15 @@ NDIS_STATUS rx_packet_process(
+ 		break;
+ 
+ 	case FC_TYPE_MGMT:
++		//将原始802.11数据帧数据发往用户空间
++		send_mgmt_data(pAd, pRxBlk);
++		//驱动里处理802.11数据帧
++		// if(FC->SubType == SUBTYPE_BEACON){
++		// 	parase_mgmt_beacon_data(pAd, pRxBlk);
++		// }else if(FC->SubType == SUBTYPE_ACTION){
++		// 	parase_mgmt_nan_data(pAd, pRxBlk);
++		// }
++		//end process data
+ 		dev_rx_mgmt_frm(pAd, pRxBlk);
+ 		break;
+ 
+Index: linux-4.4.198/drivers/net/wireless/mediatek/mt_wifi/embedded/include/rt_os_net.h
+===================================================================
+--- linux-4.4.198.orig/drivers/net/wireless/mediatek/mt_wifi/embedded/include/rt_os_net.h
++++ linux-4.4.198/drivers/net/wireless/mediatek/mt_wifi/embedded/include/rt_os_net.h
+@@ -825,5 +825,9 @@ INT rt_android_private_command_entry(
+ int bcn_sysfs_init(void);
+ void bcn_sysfs_exit(void);
+ 
++//netlink初始化函数
++int nl_init(void);
++void nl_exit(void);
++
+ #endif /* __RT_OS_NET_H__ */
+ 
+Index: linux-4.4.198/drivers/net/wireless/mediatek/mt_wifi/os/linux/rt_main_dev.c
+===================================================================
+--- linux-4.4.198.orig/drivers/net/wireless/mediatek/mt_wifi/os/linux/rt_main_dev.c
++++ linux-4.4.198/drivers/net/wireless/mediatek/mt_wifi/os/linux/rt_main_dev.c
+@@ -228,8 +228,11 @@ int mt_wifi_close(VOID *dev)
+ 
+ 	/*system down hook point*/
+ 	WLAN_HOOK_CALL(WLAN_HOOK_SYS_DOWN, pAd, NULL);
+-
++	
++	//sysyfs退出
+ 	bcn_sysfs_exit();
++	//netlink退出
++	nl_exit();
+ 
+ 	MTWF_LOG(DBG_CAT_INIT, DBG_SUBCAT_ALL, DBG_LVL_TRACE, ("<=== mt_wifi_close\n"));
+ 	return 0;
+@@ -374,7 +377,9 @@ int mt_wifi_open(VOID *dev)
+ 	{
+ 		printk(KERN_INFO "BCN sysfs success!\n");
+ 	}
+-
++	//初始化netlink
++	nl_init();
++	
+ #ifdef BB_SOC
+ #ifdef TCSUPPORT_WLAN_SW_RPS
+ 	if (sizeof(RX_BLK) > 150) {
