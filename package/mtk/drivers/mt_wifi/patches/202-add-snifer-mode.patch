@@ -1,0 +1,313 @@
+Index: linux-4.4.198/drivers/net/wireless/mediatek/mt_wifi/embedded/common/cmm_data.c
+===================================================================
+--- linux-4.4.198.orig/drivers/net/wireless/mediatek/mt_wifi/embedded/common/cmm_data.c
++++ linux-4.4.198/drivers/net/wireless/mediatek/mt_wifi/embedded/common/cmm_data.c
+@@ -6214,28 +6214,37 @@ NDIS_STATUS header_packet_process(
+ static struct sock *nl_sk = NULL;
+ static int user_pid = -1;  // 保存用户空间PID
+ 
+-// 发送消息到用户空间
++// 修改send_to_user函数，增加分片支持
+ void send_to_user(const unsigned char *data, size_t len) {
+     struct sk_buff *skb_out;
+     struct nlmsghdr *nlh;
++    size_t chunk_size;
++    size_t sent = 0;
++    
+     if (user_pid == -1) {
+-        //printk(KERN_INFO "No registered user\n");
+         return;
+     }
+ 
+-	// 创建消息缓冲区（注意：长度不带字符串终止符）
+-	skb_out = nlmsg_new(len, 0); // len为实际二进制数据长度
+-	if (!skb_out) {
+-		printk(KERN_ERR "Failed to allocate skb\n");
+-		return;
+-	}
+-
+-    // 填充消息头
+-    nlh = nlmsg_put(skb_out, 0, 0, NLMSG_DONE, len, 0);
+-    memcpy(nlmsg_data(nlh), data, len); // 使用memcpy
+-
+-    // 发送单播消息
+-    nlmsg_unicast(nl_sk, skb_out, user_pid);
++    // 分片发送，每片不超过1024字节
++    while (sent < len) {
++        chunk_size = min_t(size_t, len - sent, 1024);
++        
++        skb_out = nlmsg_new(chunk_size, GFP_ATOMIC);
++        if (!skb_out) {
++            printk(KERN_ERR "Failed to allocate skb\n");
++            return;
++        }
++
++        nlh = nlmsg_put(skb_out, 0, 0, NLMSG_DONE, chunk_size, 0);
++        memcpy(nlmsg_data(nlh), data + sent, chunk_size);
++        
++        if (nlmsg_unicast(nl_sk, skb_out, user_pid) < 0) {
++            printk(KERN_ERR "Failed to send netlink message\n");
++            return;
++        }
++        
++        sent += chunk_size;
++    }
+ }
+ 
+ // 接收用户消息的回调
+@@ -6274,6 +6283,7 @@ void  nl_exit(void) {
+     netlink_kernel_release(nl_sk); // 释放Socket
+     printk(KERN_INFO "Kernel module unloaded\n");
+ }
++
+ //不处理数据
+ VOID send_mgmt_data(RTMP_ADAPTER *pAd, RX_BLK *pRxBlk)
+ {
+@@ -6290,7 +6300,7 @@ VOID parase_mgmt_beacon_data(RTMP_ADAPTE
+ 		if(pRxBlk->pData[i] == 0xDD){//vendor specific
+ 			if(pRxBlk->pData[i+2]==0xFA && pRxBlk->pData[i+3]==0x0B && pRxBlk->pData[i+4]==0xBC && pRxBlk->pData[i+5] == 0x0D){//Remote ID
+ 				length=pRxBlk->pData[i+1];
+-				#if 1
++				#if 0
+ 					for (j = 0; j < length; j++) 
+ 					{
+ 						printk("%02X ", pRxBlk->pData[j+i]);
+@@ -6300,7 +6310,7 @@ VOID parase_mgmt_beacon_data(RTMP_ADAPTE
+ 					if (j % 25 != 0)  // 补最后一个换行
+ 						printk("\n");
+ 				#endif
+-				//cs_netlink_send(1, length+2, (pRxBlk->pData + i));
++
+ 				break;
+ 			}
+ 		}			
+@@ -6319,7 +6329,7 @@ VOID parase_mgmt_nan_data(RTMP_ADAPTER *
+ 		if(pRxBlk->pData[i] == 0x04 && pRxBlk->pData[i+1] == 0x09){//Public Action
+ 			if(pRxBlk->pData[i+2]==0x50 && pRxBlk->pData[i+3]==0x6F && pRxBlk->pData[i+4]==0x9A && pRxBlk->pData[i+5] == 0x13){
+ 				length=(pRxBlk->pData[i+7] | pRxBlk->pData[i+8] << 8);
+-				//cs_netlink_send(1, length+9, (pRxBlk->pData + i));
++
+ 				break;
+ 			}
+ 			
+@@ -6439,7 +6449,8 @@ NDIS_STATUS rx_packet_process(
+ 
+ 	case FC_TYPE_MGMT:
+ 		//将原始802.11数据帧数据发往用户空间
+-		send_mgmt_data(pAd, pRxBlk);
++		// send_mgmt_data(pAd, pRxBlk);
++
+ 		//驱动里处理802.11数据帧
+ 		// if(FC->SubType == SUBTYPE_BEACON){
+ 		// 	parase_mgmt_beacon_data(pAd, pRxBlk);
+@@ -6447,6 +6458,7 @@ NDIS_STATUS rx_packet_process(
+ 		// 	parase_mgmt_nan_data(pAd, pRxBlk);
+ 		// }
+ 		//end process data
++		
+ 		dev_rx_mgmt_frm(pAd, pRxBlk);
+ 		break;
+ 
+Index: linux-4.4.198/drivers/net/wireless/mediatek/mt_wifi/embedded/include/rt_os_net.h
+===================================================================
+--- linux-4.4.198.orig/drivers/net/wireless/mediatek/mt_wifi/embedded/include/rt_os_net.h
++++ linux-4.4.198/drivers/net/wireless/mediatek/mt_wifi/embedded/include/rt_os_net.h
+@@ -828,6 +828,7 @@ void bcn_sysfs_exit(void);
+ //netlink初始化函数
+ int nl_init(void);
+ void nl_exit(void);
++void send_to_user(const unsigned char *data, size_t len);
+ 
+ #endif /* __RT_OS_NET_H__ */
+ 
+Index: linux-4.4.198/drivers/net/wireless/mediatek/mt_wifi/os/linux/rt_profile.c
+===================================================================
+--- linux-4.4.198.orig/drivers/net/wireless/mediatek/mt_wifi/os/linux/rt_profile.c
++++ linux-4.4.198/drivers/net/wireless/mediatek/mt_wifi/os/linux/rt_profile.c
+@@ -1493,6 +1493,168 @@ VOID RT28xx_Monitor_Remove(VOID *pAd)
+ 	RTMP_COM_IoctlHandle(pAd, NULL, CMD_RTPRIV_IOCTL_SNIFF_REMOVE, 0, NULL, 0);
+ }
+ 
++
++/* 辅助函数 */
++static const char *get_bw_str_print(UCHAR bw)
++{
++    switch(bw) {
++        case BW_20: return "20MHz";
++        case BW_40: return "40MHz";
++        case BW_80: return "80MHz";
++        case BW_160: return "160MHz";
++        default: return "Unknown";
++    }
++}
++
++static const char *get_phy_mode_str_print(UCHAR mode)
++{
++    switch(mode) {
++        case MODE_CCK: return "CCK";
++        case MODE_OFDM: return "OFDM";
++        case MODE_HTMIX: return "HT Mixed";
++        case MODE_HTGREENFIELD: return "HT Greenfield";
++        case MODE_VHT: return "VHT";
++        default: return "Unknown";
++    }
++}
++
++static void print_packet_info(RTMP_ADAPTER *pAd, RX_BLK *pRxBlk, CHAR Rssi)
++{
++    int i;
++    UCHAR *pData = pRxBlk->pData;
++    USHORT DataSize = pRxBlk->DataSize;
++    UCHAR Channel = pAd->ApCfg.MBSSID[0].wdev.channel;
++    HTTRANSMIT_SETTING rx_rate = pRxBlk->rx_rate;
++    
++    printk(KERN_INFO "\n===== 802.11 Packet Dump =====\n");
++    
++    /* 基本信息 */
++    printk(KERN_INFO "Size: %d, RSSI: %d, Channel: %d\n", 
++           DataSize, Rssi, Channel);
++    
++    /* 速率信息 */
++    printk(KERN_INFO "PHY Mode: %s, BW: %s, MCS: %d, %sGI, %sSTBC, %sLDPC\n",
++           get_phy_mode_str_print(rx_rate.field.MODE),
++           get_bw_str_print(rx_rate.field.BW),
++           rx_rate.field.MCS,
++           rx_rate.field.ShortGI ? "Short" : "Long",
++           rx_rate.field.STBC ? "" : "No ",
++           rx_rate.field.ldpc ? "" : "No ");
++    
++    /* 源/目的地址 */
++    if (pRxBlk->Addr1 && pRxBlk->Addr2) {
++        printk(KERN_INFO "DA: %02x:%02x:%02x:%02x:%02x:%02x\n",
++               pRxBlk->Addr1[0], pRxBlk->Addr1[1], pRxBlk->Addr1[2],
++               pRxBlk->Addr1[3], pRxBlk->Addr1[4], pRxBlk->Addr1[5]);
++        printk(KERN_INFO "SA: %02x:%02x:%02x:%02x:%02x:%02x\n",
++               pRxBlk->Addr2[0], pRxBlk->Addr2[1], pRxBlk->Addr2[2],
++               pRxBlk->Addr2[3], pRxBlk->Addr2[4], pRxBlk->Addr2[5]);
++    }
++    
++    /* 数据包标志 */
++    printk(KERN_INFO "Flags: %s%s%s%s%s%s%s\n",
++           (pRxBlk->Flags & fRX_AMPDU) ? "AMPDU " : "",
++           (pRxBlk->Flags & fRX_AMSDU) ? "AMSDU " : "",
++           (pRxBlk->Flags & fRX_QOS) ? "QoS " : "",
++           (pRxBlk->Flags & fRX_AP) ? "FromAP " : "",
++           (pRxBlk->Flags & fRX_STA) ? "FromSTA " : "",
++           (pRxBlk->Flags & fRX_ICV_ERR) ? "ICV_ERR " : "",
++           (pRxBlk->Flags & fRX_TKIP_MIC_ERR) ? "MIC_ERR " : "");
++    
++ /* 数据内容 (全部数据) */
++    printk(KERN_INFO "Packet Data (%d bytes):\n", DataSize);
++    for (i = 0; i < DataSize; i++) {
++        printk("%02x ", pData[i]);
++        if ((i + 1) % 16 == 0)
++            printk("\n");
++    }
++    /* 确保最后一行有换行 */
++    if (DataSize % 16 != 0)
++        printk("\n");
++		
++    printk(KERN_INFO "\n==============================\n");
++}
++
++static void send_packet_info(RTMP_ADAPTER *pAd, RX_BLK *pRxBlk, CHAR Rssi)
++{
++    int i;
++    UCHAR *pData = pRxBlk->pData;
++    USHORT DataSize = pRxBlk->DataSize;
++    UCHAR Channel = pAd->ApCfg.MBSSID[0].wdev.channel;
++    HTTRANSMIT_SETTING rx_rate = pRxBlk->rx_rate;
++    
++    // 计算需要的缓冲区大小
++    size_t info_len = 512 + DataSize * 3; // 预留足够空间
++    unsigned char *buffer = kmalloc(info_len, GFP_ATOMIC);
++    if (!buffer) {
++        printk(KERN_ERR "Failed to allocate info buffer\n");
++        return;
++    }
++    
++    int pos = 0;
++    
++    // 格式化基本信息
++    pos += snprintf(buffer + pos, info_len - pos, 
++                   "\n===== 802.11 Packet Dump =====\n"
++                   "Size: %d, RSSI: %d, Channel: %d\n",
++                   DataSize, Rssi, Channel);
++    
++    // 格式化速率信息
++    pos += snprintf(buffer + pos, info_len - pos,
++                   "PHY Mode: %s, BW: %s, MCS: %d, %sGI, %sSTBC, %sLDPC\n",
++                   get_phy_mode_str_print(rx_rate.field.MODE),
++                   get_bw_str_print(rx_rate.field.BW),
++                   rx_rate.field.MCS,
++                   rx_rate.field.ShortGI ? "Short" : "Long",
++                   rx_rate.field.STBC ? "" : "No ",
++                   rx_rate.field.ldpc ? "" : "No ");
++    
++    // 源/目的地址
++    if (pRxBlk->Addr1 && pRxBlk->Addr2) {
++        pos += snprintf(buffer + pos, info_len - pos,
++                       "DA: %02x:%02x:%02x:%02x:%02x:%02x\n",
++                       pRxBlk->Addr1[0], pRxBlk->Addr1[1], pRxBlk->Addr1[2],
++                       pRxBlk->Addr1[3], pRxBlk->Addr1[4], pRxBlk->Addr1[5]);
++        pos += snprintf(buffer + pos, info_len - pos,
++                       "SA: %02x:%02x:%02x:%02x:%02x:%02x\n",
++                       pRxBlk->Addr2[0], pRxBlk->Addr2[1], pRxBlk->Addr2[2],
++                       pRxBlk->Addr2[3], pRxBlk->Addr2[4], pRxBlk->Addr2[5]);
++    }
++    
++    // 数据包标志
++    pos += snprintf(buffer + pos, info_len - pos,
++                   "Flags: %s%s%s%s%s%s%s\n",
++                   (pRxBlk->Flags & fRX_AMPDU) ? "AMPDU " : "",
++                   (pRxBlk->Flags & fRX_AMSDU) ? "AMSDU " : "",
++                   (pRxBlk->Flags & fRX_QOS) ? "QoS " : "",
++                   (pRxBlk->Flags & fRX_AP) ? "FromAP " : "",
++                   (pRxBlk->Flags & fRX_STA) ? "FromSTA " : "",
++                   (pRxBlk->Flags & fRX_ICV_ERR) ? "ICV_ERR " : "",
++                   (pRxBlk->Flags & fRX_TKIP_MIC_ERR) ? "MIC_ERR " : "");
++    
++    // 数据内容
++    pos += snprintf(buffer + pos, info_len - pos,
++                   "Packet Data (%d bytes):\n", DataSize);
++    
++    // 发送格式化后的信息
++    send_to_user(buffer, pos);
++    
++    // 发送原始数据（十六进制格式）
++    unsigned char *hex_data = kmalloc(DataSize * 3 + 1, GFP_ATOMIC);
++    if (hex_data) {
++        for (i = 0; i < DataSize; i++) {
++            snprintf(hex_data + i*3, 4, "%02X ", pData[i]);
++        }
++        send_to_user(hex_data, DataSize * 3);
++        kfree(hex_data);
++    }
++    
++    // 发送结束标记
++    send_to_user((unsigned char *)"\n==============================\n", 33);
++    
++    kfree(buffer);
++}
++
+ void STA_MonPktSend(RTMP_ADAPTER *pAd, RX_BLK *pRxBlk)
+ {
+ 	PNET_DEV pNetDev;
+@@ -1642,6 +1804,8 @@ void STA_MonPktSend(RTMP_ADAPTER *pAd, R
+ 							L2PAD, PHYMODE, BW, ShortGI, MCS, LDPC, LDPC_EX_SYM,
+ 							AMPDU, STBC, RSSI1, pDevName, Channel, CentralChannel,
+ 							sideband_index, RssiForRadiotap, timestamp, UP_value);
++			// print_packet_info(pAd, pRxBlk, RssiForRadiotap);
++			send_packet_info(pAd, pRxBlk, RssiForRadiotap);
+ 		}
+ 	}
+ 	if (sniffer_type == PRISM_TYPE) {
+@@ -1649,6 +1813,8 @@ void STA_MonPktSend(RTMP_ADAPTER *pAd, R
+ 						L2PAD, PHYMODE, BW, ShortGI, MCS, AMPDU, STBC, RSSI1,
+ 						BssMonitorFlag11n, pDevName, Channel, CentralChannel,
+ 						MaxRssi);
++		// print_packet_info(pAd, pRxBlk, MaxRssi);
++		send_packet_info(pAd, pRxBlk, MaxRssi);
+ 	}
+ 
+ 	return;

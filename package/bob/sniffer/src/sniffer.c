@@ -7,7 +7,7 @@
 #include <sys/socket.h>
 #include <linux/netlink.h>
 
-#define MAX_PAYLOAD 4096
+#define MAX_PAYLOAD 8192
 
 // 进程异常退出时进入该函数
 static void main_stop_handle(int sig) {
@@ -80,21 +80,17 @@ int main(int argc, char *argv[]) {
         ssize_t len = recvmsg(sock_fd, &msg, 0);
         if (len < 0) {
             perror("recvmsg failed");
-            break;
+            continue ;
         }
 
         // 计算有效载荷长度
         size_t payload_len = nlh->nlmsg_len - NLMSG_HDRLEN;
         unsigned char *payload = NLMSG_DATA(nlh);
 
-        // 打印原始数据帧数据
-        printf("[ ");
-        for (int i = 0; i < payload_len; i++) {
-            printf("%02X ", payload[i]);
-            if ((i + 1) % 25 == 0)  // 每25个换行
-                printf("\n");
-        }
-        printf("]\n");
+        // 直接打印接收到的文本信息
+        // 内核已经格式化好了，我们只需要原样输出
+        fwrite(payload, 1, payload_len, stdout);
+        fflush(stdout);
     }
 
     close(sock_fd);

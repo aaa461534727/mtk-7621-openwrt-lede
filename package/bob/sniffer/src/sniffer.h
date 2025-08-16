@@ -20,6 +20,5 @@
 #include <time.h>
 
 #define NETLINK_USER 30     //netlink传递数据编号
-#define MAX_PAYLOAD 2048
 
 #endif
