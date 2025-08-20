@@ -20,5 +20,9 @@
 #include <time.h>
 
 #define NETLINK_USER 30     //netlink传递数据编号
+#define TYPE_STRING 0x01
+#define TYPE_HEX    0x02
+#define TYPE_INT    0x03
+#define TYPE_FLOAT  0x04
 
 #endif

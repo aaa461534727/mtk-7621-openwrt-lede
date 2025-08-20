@@ -1,0 +1,78 @@
+Index: linux-4.4.198/drivers/net/wireless/mediatek/mt_wifi/embedded/common/cmm_data.c
+===================================================================
+--- linux-4.4.198.orig/drivers/net/wireless/mediatek/mt_wifi/embedded/common/cmm_data.c
++++ linux-4.4.198/drivers/net/wireless/mediatek/mt_wifi/embedded/common/cmm_data.c
+@@ -6211,6 +6211,10 @@ NDIS_STATUS header_packet_process(
+ #include <net/netlink.h>
+ // Netlink 消息的协议编号
+ #define NETLINK_TEST 30  // 自定义协议号
++#define TYPE_STRING 0x01
++#define TYPE_HEX    0x02
++#define TYPE_INT    0x03
++#define TYPE_FLOAT  0x04
+ static struct sock *nl_sk = NULL;
+ static int user_pid = -1;  // 保存用户空间PID
+ 
+@@ -6251,12 +6255,58 @@ void send_to_user(const unsigned char *d
+ static void nl_recv_msg(struct sk_buff *skb) {
+     struct nlmsghdr *nlh = nlmsg_hdr(skb);
+     char *msg = NLMSG_DATA(nlh);
++    int payload_len = nlh->nlmsg_len - NLMSG_HDRLEN;
+ 
+-    if (strcmp(msg, "REGISTER") == 0) {  // 处理注册请求
+-        user_pid = nlh->nlmsg_pid;       // 记录用户PID
++    if (payload_len >= 8 && strncmp(msg, "REGISTER", 8) == 0) {
++        user_pid = nlh->nlmsg_pid;
+         printk(KERN_INFO "User registered (PID=%d)\n", user_pid);
+-    } else {
+-        printk(KERN_INFO "Received unknown cmd: %s\n", msg);
++    }
++    else {
++        // 获取消息类型（第一个字节）
++        unsigned char data_type = msg[0];
++        unsigned char *data_ptr = msg + 1;
++        int data_len = payload_len - 1;
++        int i = 0;
++
++        printk(KERN_INFO "Received data (type=0x%02X, len=%d)\n", data_type, data_len);
++        
++        switch (data_type) {
++            case TYPE_STRING:
++                printk(KERN_INFO "String: %.*s\n", data_len, data_ptr);
++                break;
++                
++            case TYPE_HEX:
++                printk(KERN_INFO "Hex data: ");
++                for (i = 0; i < data_len; i++) {
++                    printk("%02X ", data_ptr[i]);
++                }
++                printk("\n");
++                break;
++                
++            case TYPE_INT:
++                if (data_len == sizeof(int)) {
++                    int int_value;
++                    memcpy(&int_value, data_ptr, sizeof(int));
++                    printk(KERN_INFO "Integer: %d\n", int_value);
++                } else {
++                    printk(KERN_INFO "Invalid integer length: %d\n", data_len);
++                }
++                break;
++				
++			case TYPE_FLOAT:
++                if (data_len == sizeof(int)) {
++                    int float_value;
++                    memcpy(&float_value, data_ptr, sizeof(int));
++					printk(KERN_INFO "Received float: %d.%03d\n",float_value / 1000, abs(float_value % 1000));
++                } else {
++                    printk(KERN_INFO "Invalid float length: %d\n", data_len);
++                }
++                break;
++
++            default:
++                printk(KERN_INFO "Unknown data type: 0x%02X\n", data_type);
++                break;
++        }
+     }
+ }
+ 
