@@ -25,7 +25,7 @@ define Package/libcommon
 	$(call Package/libcommon/Default)
 	MENU:=1
   TITLE:= cs common library
-  DEPENDS:=+libpthread +libcjson +libuci +zlib +libblobmsg-json +libubus +libubox +libopenssl +libkvcutil +datconf +libsprd-ril
+  DEPENDS:=+libpthread +libcjson +libuci +zlib +libblobmsg-json +libubus +libubox +libopenssl +libkvcutil +datconf 
 endef
 
 define Package/libcommon/config
