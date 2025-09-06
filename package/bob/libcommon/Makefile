@@ -1,5 +1,5 @@
 #
-# Copyright (C) 2015 CaryStudio
+# Copyright (C) 2015 bob
 #
 # This is free software, licensed under the GNU General Public License v2.
 # See /LICENSE for more information.
@@ -13,15 +13,44 @@ PKG_BUILD_DIR:=$(BUILD_DIR)/$(PKG_NAME)
 
 include $(INCLUDE_DIR)/package.mk
 include $(INCLUDE_DIR)/kernel.mk
-	
-define Package/libcommon
+
+define Package/libcommon/Default
   SECTION:=bob Properties
   CATEGORY:=bob Properties
   SUBMENU:=libs
-  TITLE:= common library
-  DEPENDS:=+libpthread +libcjson +libuci +libblobmsg-json +libubus +libubox +libkvcutil +zlib
+  TITLE:=lib cs common module
+endef	
+
+define Package/libcommon
+	$(call Package/libcommon/Default)
+	MENU:=1
+  TITLE:= cs common library
+  DEPENDS:=+libpthread +libcjson +libuci +zlib +libblobmsg-json +libubus +libubox +libopenssl +libkvcutil +datconf +libsprd-ril
 endef
 
+define Package/libcommon/config
+	config CS_COMMON_BASE64
+		bool "support base64"
+		depends on PACKAGE_libcommon
+		default n
+		help
+		  Support base64 in cscommon
+
+	config CS_COMMON_AES
+		bool "support aes"
+		depends on PACKAGE_libcommon
+		default n
+		help
+		  Support AES in cscommon
+
+	config CS_COMMON_SSL
+		bool "support ssl encode and decode"
+		depends on PACKAGE_libcommon
+		default n
+		help
+		  Support SSL in cscommon
+
+endef
 
 define Build/Prepare
 	mkdir -p $(PKG_BUILD_DIR)

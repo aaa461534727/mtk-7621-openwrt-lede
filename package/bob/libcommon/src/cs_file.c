@@ -5,20 +5,12 @@
 
 */
 
-#define _BSD_SOURCE
 
-#include <string.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <unistd.h>
-#include <fcntl.h>
-#include <sys/stat.h>
-#include <stdarg.h>
-#include <dirent.h>
-#include <syslog.h>
-#include <sys/types.h>
 #include <sys/file.h>
+
 #include "cs_common.h"
+
+
 
 
 int f_exists(const char *path)	// note: anything but a directory
@@ -40,7 +32,7 @@ unsigned long f_size(const char *path)	// 4GB-1	-1 = error
 	return (unsigned long)-1;
 }
 
-int f_read_excl(const char *path, void *buffer, int max)
+int f_read(const char *path, void *buffer, int max)
 {
 	int f;
 	int n;
@@ -53,18 +45,19 @@ int f_read_excl(const char *path, void *buffer, int max)
 	return n;
 }
 
-int f_read(const char *path, void *buffer, int max)
-{
-	int f;
-	int n;
-
-	if ((f = open(path, O_RDONLY)) < 0) return -1;
-	n = read(f, buffer, max);
-	close(f);
-	return n;
-}
-
-int f_write_excl(const char *path, const void *buffer, int len, unsigned flags, unsigned cmode)
+/**
+ * Write @buffer, length len, to file specified by @path.
+ * @path:
+ * @buffer:
+ * @len:
+ * @flags:	Combination of FW_APPEND, FW_NEWLINE, FW_SILENT, etc.
+ * @cmode:
+ * @return:
+ * 	>0:	writted length
+ * 	-1:	open file error or -EINVAL
+ *  -errno:	errno of write file error
+ */
+int f_write(const char *path, const void *buffer, int len, unsigned flags, unsigned cmode)
 {
 	static const char nl = '\n';
 	int f, fl;
@@ -91,59 +84,6 @@ int f_write_excl(const char *path, const void *buffer, int len, unsigned flags, 
 	return r;
 }
 
-/**
- * Write @buffer, length len, to file specified by @path.
- * @path:
- * @buffer:
- * @len:
- * @flags:	Combination of FW_APPEND, FW_NEWLINE, FW_SILENT, etc.
- * @cmode:
- * @return:
- * 	>0:	writted length
- * 	-1:	open file error or -EINVAL
- *  -errno:	errno of write file error
- */
-int f_write(const char *path, const void *buffer, int len, unsigned flags, unsigned cmode)
-{
-	static const char nl = '\n';
-	const void *b;
-	int f, ret = 0;
-	size_t wlen;
-	ssize_t r;
-	mode_t m;
-
-	m = umask(0);
-	if (cmode == 0) cmode = 0666;
-	if ((f = open(path, (flags & FW_APPEND) ? (O_WRONLY|O_CREAT|O_APPEND) : (O_WRONLY|O_CREAT|O_TRUNC), cmode)) >= 0) {
-		if ((buffer == NULL)) {
-			if (flags & FW_NEWLINE) {
-				if (write(f, &nl, 1) == 1)
-					ret = 1;
-			}
-		} else {
-			for (b = buffer, wlen = len; wlen > 0;) {
-				r = write(f, b, wlen);
-				if (r < 0) {
-					ret = -errno;
-					if (!(flags & FW_SILENT)) {
-						printf("%s: Write [%s] to [%s] failed! errno %d (%s)\n",
-							__func__, (char *)b, path, errno, strerror(errno));
-					}
-					break;
-				} else {
-					ret += r;
-					b += r;
-					wlen -= r;
-				}
-			}
-		}
-		close(f);
-	} else {
-		ret = -1;
-	}
-	umask(m);
-	return ret;
-}
 
 int f_read_string(const char *path, char *buffer, int max)
 {
@@ -152,6 +92,47 @@ int f_read_string(const char *path, char *buffer, int max)
 	buffer[(n > 0) ? n : 0] = 0;
 	return n;
 }
+
+int f_read_int(const char *path)
+{
+	FILE *fp;
+	int ret=0;
+	char buf[128] = {0};
+
+	if(!f_exists(path))
+		return 0;
+	
+	fp = fopen(path, "r");
+	if (NULL == fp){
+		return 0;
+	}
+	if (fgets(buf, sizeof(buf), fp) != NULL) {
+		ret=atoi(buf);
+	}
+	
+	fclose(fp);
+	return ret;
+}
+
+
+unsigned long long f_read_long_long(char* name)
+{
+    char path[64], buff[64];
+    FILE *fp;
+    sprintf(path, "%s",name);
+
+    fp = fopen(path, "r");
+    if (!fp)
+    {
+        fprintf(stderr, "Read tmp file error:%s!\n",name);
+        return 0;
+    }
+    fgets(buff, 64, fp);
+    fclose(fp);
+
+    return (strtoull(buff,NULL,0));
+}
+
 
 int f_write_string(const char *path, const char *buffer, unsigned flags, unsigned cmode)
 {
@@ -390,67 +371,5 @@ void file_unlock(int lockfd)
 
 	ftruncate(lockfd, 0);
 	close(lockfd);
-}
-
-int getFileVal(const char *path)
-{
-	FILE *fp;
-	int ret=0;
-	char buf[128] = {0};
-
-	if(!f_exists(path))
-		return 0;
-	
-	fp = fopen(path, "r");
-	if (NULL == fp){
-		return 0;
-	}
-	if (fgets(buf, sizeof(buf), fp) != NULL) {
-		ret=atoi(buf);
-	}
-	
-	fclose(fp);
-	return ret;
-}
-
-
-unsigned long long getLongValFromFile(char* name)
-{
-    char path[64], buff[64];
-    FILE *fp;
-    sprintf(path, "%s",name);
-
-    fp = fopen(path, "r");
-    if (!fp)
-    {
-        fprintf(stderr, "Read tmp file error:%s!\n",name);
-        return 0;
-    }
-    fgets(buff, 64, fp);
-    fclose(fp);
-
-    return (strtoull(buff,NULL,0));
-}
-
-
-void getStrFromFile(char* path, char* tmpbuf)
-{
-	char tmp[2] = {0};
-	FILE *fp;
-	int i = 0;
-	strcpy(tmpbuf,"");
-	fp = fopen(path, "r");
-	if (!fp) {
-		fprintf(stderr, "Read file error:%s!\n",path);
-		return ;
-	}
-	while(!feof(fp)){
-		fread(tmp,1,1,fp);
-		tmpbuf[i++] = tmp[0];
-	}
-	tmpbuf[i-2]='\0';//del "\n\r"
-	
-	fclose(fp);
-	return;
 }
 

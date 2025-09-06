@@ -41,7 +41,7 @@ init_uci_context(struct uci_context* ctx, unsigned char package)
 
   if(uci_load(ctx, PKG_ID_TOFILE(package), NULL) != UCI_OK)
   {
-	printf("%s/%s is missing or corrupt\n", ctx->confdir, PKG_ID_TOFILE(package));
+	//printf("%s/%s is missing or corrupt\n", ctx->confdir, PKG_ID_TOFILE(package));
 	return 0;
   }
   return 1;
@@ -290,17 +290,16 @@ static struct cs_uci_get_context* i_cs_uci_get_uci_context(unsigned char package
 
 static int i_cs_uci_force_refresh_context(unsigned char package) 
 {
+	struct cs_uci_get_context* get_ctx;
 
-  	struct cs_uci_get_context* get_ctx;
+	long now = (long) time(NULL);
 
-  	long now = (long) time(NULL);
-  	int ret = 0;
+	/* Init the get context if it is not initialized yet */
 
-  	/* Init the get context if it is not initialized yet */
-  	get_ctx = get_global_get_context(package);
-  	if (get_ctx == NULL) {
-     	 return 0;
-  	}
+	get_ctx = get_global_get_context(package);
+	if (get_ctx == NULL) {
+		return 0;
+	}
 
   	pthread_mutex_lock(&(get_ctx->get_ctx_lock));
 	/* force refresh the UCI context when needed*/

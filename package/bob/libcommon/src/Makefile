@@ -1,10 +1,23 @@
+include $(TOPDIR)/.config
+
 TARGETS = libcommon.so
 
 CFLAGS  += -Wall -fno-strict-aliasing
-LDFLAGS += -L. -lpthread -lcjson -luci -lm -lz -lubus -lblobmsg_json -lubox -ldatconf -lkvcutil
+LDFLAGS += -L. -lpthread -lcjson -luci -lm -lz -lubus -lblobmsg_json -lubox -lssl -lcrypto -ldatconf -lkvcutil
 
-SRCS := $(wildcard ./*.c)
-OBJS := $(subst .c,.o,$(SRCS))
+OBJS := cs_common.o cs_common2.o cs_uci.o cs_uci_fun.o cs_file.o cs_firmware.o cs_led.o cs_param_check.o cs_ubus_cli.o flash_mtd.o flash_bin.o cs_modem.o md5.o
+
+ifeq ($(CONFIG_CS_COMMON_BASE64), y)
+OBJS += cs_base64.o
+endif
+
+ifeq ($(CONFIG_CS_COMMON_AES), y)
+OBJS += cs_aes.o
+endif
+
+ifeq ($(CONFIG_CS_COMMON_SSL), y)
+OBJS += cs_ssl.o
+endif
 
 all: $(TARGETS)
 

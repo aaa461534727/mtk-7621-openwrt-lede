@@ -1,6 +1,6 @@
 #include "cs_uci_fun.h"
 
-UCI_FUN_BOOL Uci_Get_Str(int title,char *section, char *option,char *value)
+UCI_FUN_BOOL Uci_Get_Str(int title, const char *section, const char *option, char *value)
 {
 	char cli_str[CMD_STR_LEN];
 	struct cs_uci_get_context* uci_lib = NULL;
@@ -62,7 +62,7 @@ UCI_FUN_BOOL Uci_Get_Int_By_Section_Index(int title,char *section_type,int index
 }
 
 
-UCI_FUN_BOOL Uci_Get_Int(int title,char *section, char *option,int *value)
+UCI_FUN_BOOL Uci_Get_Int(int title, const char *section, const char *option, int *value)
 {
 	char value_str[RESULT_STR_LEN] ={0};
 	
@@ -77,7 +77,7 @@ UCI_FUN_BOOL Uci_Get_Int(int title,char *section, char *option,int *value)
 	return UCI_FUN_TRUE;
 }
 
-UCI_FUN_BOOL Uci_Get_Long(int title,char *section, char *option,long *value)
+UCI_FUN_BOOL Uci_Get_Long(int title, const char *section, const char *option, long *value)
 {
 	char value_str[RESULT_STR_LEN] ={0};
 	
@@ -93,7 +93,7 @@ UCI_FUN_BOOL Uci_Get_Long(int title,char *section, char *option,long *value)
 }
 
 
-UCI_FUN_BOOL Uci_Get_Long_Long(int title,char *section, char *option,long *value)
+UCI_FUN_BOOL Uci_Get_Long_Long(int title, const char *section, const char *option, long long *value)
 {
 	char value_str[RESULT_STR_LEN] ={0};
 	
@@ -110,7 +110,7 @@ UCI_FUN_BOOL Uci_Get_Long_Long(int title,char *section, char *option,long *value
 
 
 
-UCI_FUN_BOOL Uci_Set_Str(int title,char *section, char *option,char *value)
+UCI_FUN_BOOL Uci_Set_Str(int title, const char *section, const char *option, char *value)
 {
 	char cmd[LONG_BUFF_LEN] = {0};
 
@@ -127,7 +127,7 @@ UCI_FUN_BOOL Uci_Set_Str(int title,char *section, char *option,char *value)
 	return UCI_FUN_TRUE;
 }
 
-UCI_FUN_BOOL Uci_Add_List(int title,char *section, char *option,char *value)
+UCI_FUN_BOOL Uci_Add_List(int title, const char *section, const char *option, char *value)
 {
 	char cmd[CMD_STR_LEN] = {0};
 
@@ -143,7 +143,7 @@ UCI_FUN_BOOL Uci_Add_List(int title,char *section, char *option,char *value)
 	return UCI_FUN_TRUE;
 }
 
-UCI_FUN_BOOL Uci_Del_List(int title,char *section, char *option,char *value)
+UCI_FUN_BOOL Uci_Del_List(int title, const char *section, const char *option, char *value)
 {
 	char cmd[CMD_STR_LEN] = {0};
 
@@ -159,7 +159,7 @@ UCI_FUN_BOOL Uci_Del_List(int title,char *section, char *option,char *value)
 	return UCI_FUN_TRUE;
 }
 
-UCI_FUN_BOOL Uci_Add_Section(int title,char *section_type)
+UCI_FUN_BOOL Uci_Add_Section(int title, const char *section_type)
 {
 	char cmd[CMD_STR_LEN] = {0};
 
@@ -175,7 +175,7 @@ UCI_FUN_BOOL Uci_Add_Section(int title,char *section_type)
 	return UCI_FUN_TRUE;
 }
 
-UCI_FUN_BOOL Uci_Del_Section(int title,char *section_name)
+UCI_FUN_BOOL Uci_Del_Section(int title, const char *section_name)
 {
 	char cmd[CMD_STR_LEN] = {0};
 
@@ -218,7 +218,7 @@ UCI_FUN_BOOL Uci_Get_Str_By_Idx(int title, const char *section, int idx, const c
 	return Uci_Get_Str(title, buff, option, value);
 }
 
-UCI_FUN_BOOL Uci_Get_Int_By_Idx(int title,char *section, int idx, char *option,int *value)
+UCI_FUN_BOOL Uci_Get_Int_By_Idx(int title, const char *section, int idx, const char *option,int *value)
 {
 	char value_str[RESULT_STR_LEN] ={0};
 	

@@ -1,7 +1,6 @@
 #ifndef __CS_UCI_H__
 #define __CS_UCI_H__
 
-
 #include <string.h>
 #include <stdlib.h>
 #include <sys/stat.h>
@@ -14,18 +13,14 @@
 #define MAX_UCI_STRLEN			70
 #define MAX_UCI_VALUE_LEN		4096//1024->4096 for static dhcp list
 
-
 /* Default UCI context timeout */
 /* 5 secs */
 #define DEFAULT_CTX_TIMEOUT     			5
 /* 2 sec, the context will be reused if the last access if within this timeout. (To avoid changing view, when getting a large table) */
 #define DEFAULT_CTX_LASTACCESS_TIMEOUT     	2
 
-
-
-
 #define DEFAULT_UCI_STATUS_PATH							"/tmp/cste/"
-#define UCI_CUSTOM_INFO_PATH							"/userdata/"
+#define UCI_CUSTOM_INFO_PATH							"/mnt/"
 #define DEFAULT_UCI_CONFIG_PATH							"/etc/config"
 #define ETC_PATH								        "/etc"
 #define ROM_ETC_PATH									"/rom/etc"
@@ -47,7 +42,7 @@
 #define PKG_CSFW_CONFIG_FILE           					"csfw"
 #define PKG_TIMER_CONFIG_FILE           				"timertask"
 #define PKG_PRODUCT_CONFIG_FILE        					"product"  /*in /etc directory*/
-#define PKG_WIRELESS_CONFIG_FILE       					"wifi"
+#define PKG_WIRELESS_CONFIG_FILE       					"wireless"
 #define PKG_QOS_CONFIG_FILE            					"qos"
 #define PKG_WEBR_CONFIG_FILE            				"webr"
 #define PKG_DDNS_CONFIG_FILE        					"ddns"
@@ -65,7 +60,9 @@
 #define PKG_IPSEC_CONFIG_FILE         					"ipsec"
 #define PKG_WIFIDOG_CONFIG_FILE         				"wifidog"
 #define PKG_PORTALAUTH_CONFIG_FILE         				"portalauth"
+
 #define PKG_CLOUDAC_CONFIG_FILE         				"cloudac"
+
 #define PKG_IPTV_CONFIG_FILE							"iptv"
 #define PKG_UPNPD_CONFIG_FILE							"upnpd"
 #define PKG_PARENTAL_CONFIG_FILE						"parental"
@@ -79,7 +76,17 @@
 #define PKG_TRAFFIC_CONFIG_FILE							"traffic"
 #define PKG_UDPXY_CONFIG_FILE							"udpxy"
 #define PKG_MESH_INFO_CONFIG_FILE						"meshinfo"
-#define PKG_RID_SERVICE_FILE							"rid_service"
+#define PKG_ROCKSPACE_CONFIG_FILE					    "rockspace_iot"
+#define PKG_CSTE_SUB_CONFIG_FILE					    "cste_sub"
+#define PKG_WAN_MODEM_CONFIG_FILE						"modem"
+#define PKG_CS_MODEM_CONFIG_FILE						"csmodem"
+#define PKG_EOIP_CONFIG_FILE							"eoip"
+#define PKG_TUNNEL_CONFIG_FILE							"tunnel"
+#define PKG_WAN_DEFAULT_CONFIG_FILE						"wan_default"
+#define PKG_DTU_CONFIG_FILE								"dtu"
+#define PKG_IOT_CONFIG_FILE								"iot"
+#define PKG_ROUTER_QUAGGA_CONFIG_FILE					"quagga"
+#define PKG_VRRP_CONFIG_FILE							"vrrpd"
 
 typedef enum
 {
@@ -131,10 +138,19 @@ typedef enum
 	PKG_TRAFFIC_CONFIG,
 	PKG_UDPXY_CONFIG,
 	PKG_MESH_INFO_CONFIG,
-    PKG_RID_SERVICE,
-	PKG_NUM_OF_PKG  /* This definition should be put at last, to count the total number of packages */
+	PKG_ROCKSPACE_CONFIG,
+	PKG_CSTE_SUB_CONFIG,
+	PKG_WAN_MODEM_CONFIG,
+	PKG_CS_MODEM_CONFIG,
+	PKG_EOIP_CONFIG,
+	PKG_TUNNEL_CONFIG,
+	PKG_WAN_DEFAULT_CONFIG,
+	PKG_DTU_CONFIG,
+	PKG_IOT_CONFIG,
+	PKG_ROUTER_QUAGGA_CONFIG,
+	PKG_VRRP_CONFIG,
+	PKG_NUM_OF_PKG   /* This definition should be put at last, to count the total number of packages */
 }CS_UCI_TITLE;
-
 
 #define PKG_ID_TOFILE(id) \
  ((id == PKG_SYSTEM_STATUS) ? PKG_SYSTEM_STATUS_FILE : \
@@ -178,13 +194,23 @@ typedef enum
   (id == PKG_ANDLINK_CONFIG)? PKG_ANDLINK_CONFIG_FILE: \
   (id == PKG_CMCC_DM_CONFIG)? PKG_CMCC_DM_CONFIG_FILE: \
   (id == PKG_ICWMP_CONFIG)? PKG_ICWMP_CONFIG_FILE: \
-  (id == PKG_STUN_CONFIG)? PKG_STUN_CONFIG_FILE: \  
+  (id == PKG_STUN_CONFIG)? PKG_STUN_CONFIG_FILE: \
   (id == PKG_SCH_CONFIG)? PKG_SCH_CONFIG_FILE: \
-  (id == PKG_WANDUCK_CONFIG)? PKG_WANDUCK_CONFIG_FILE: \ 
-  (id == PKG_TRAFFIC_CONFIG)? PKG_TRAFFIC_CONFIG_FILE: \ 
-  (id == PKG_UDPXY_CONFIG)? PKG_UDPXY_CONFIG_FILE: \ 
-  (id == PKG_MESH_INFO_CONFIG)? PKG_MESH_INFO_CONFIG_FILE: \ 
-  (id == PKG_RID_SERVICE)? PKG_RID_SERVICE_FILE: \
+  (id == PKG_WANDUCK_CONFIG)? PKG_WANDUCK_CONFIG_FILE: \
+  (id == PKG_TRAFFIC_CONFIG)? PKG_TRAFFIC_CONFIG_FILE: \
+  (id == PKG_UDPXY_CONFIG)? PKG_UDPXY_CONFIG_FILE: \
+  (id == PKG_MESH_INFO_CONFIG)? PKG_MESH_INFO_CONFIG_FILE: \
+  (id == PKG_ROCKSPACE_CONFIG)? PKG_ROCKSPACE_CONFIG_FILE: \
+  (id == PKG_CSTE_SUB_CONFIG)? PKG_CSTE_SUB_CONFIG_FILE: \
+  (id == PKG_WAN_MODEM_CONFIG)? PKG_WAN_MODEM_CONFIG_FILE: \
+  (id == PKG_CS_MODEM_CONFIG)? PKG_CS_MODEM_CONFIG_FILE: \
+  (id == PKG_EOIP_CONFIG)? PKG_EOIP_CONFIG_FILE: \
+  (id == PKG_TUNNEL_CONFIG)? PKG_TUNNEL_CONFIG_FILE: \
+  (id == PKG_WAN_DEFAULT_CONFIG)? PKG_WAN_DEFAULT_CONFIG_FILE: \
+  (id == PKG_DTU_CONFIG)? PKG_DTU_CONFIG_FILE: \
+  (id == PKG_IOT_CONFIG)? PKG_IOT_CONFIG_FILE: \
+  (id == PKG_ROUTER_QUAGGA_CONFIG)? PKG_ROUTER_QUAGGA_CONFIG_FILE: \
+  (id == PKG_VRRP_CONFIG)? PKG_VRRP_CONFIG_FILE: \
 	 "Unknown ID")
 
 #define PKG_FILE_PATH(id) \
@@ -225,19 +251,28 @@ typedef enum
   (id == PKG_IPTV_CONFIG) ? DEFAULT_UCI_CONFIG_PATH : \
   (id == PKG_UPNPD_CONFIG) ? DEFAULT_UCI_CONFIG_PATH : \
   (id == PKG_PARENTAL_CONFIG) ? DEFAULT_UCI_CONFIG_PATH : \
-  (id == PKG_EASYCWMP_CONFIG) ? DEFAULT_UCI_CONFIG_PATH : \ 
-  (id == PKG_ANDLINK_CONFIG)  ? DEFAULT_UCI_CONFIG_PATH : \ 
-  (id == PKG_CMCC_DM_CONFIG)  ? DEFAULT_UCI_CONFIG_PATH : \ 
-  (id == PKG_ICWMP_CONFIG) ? DEFAULT_UCI_CONFIG_PATH : \ 
-  (id == PKG_STUN_CONFIG) ? DEFAULT_UCI_CONFIG_PATH : \   
-  (id == PKG_SCH_CONFIG) ? DEFAULT_UCI_CONFIG_PATH : \   
-  (id == PKG_WANDUCK_CONFIG) ? DEFAULT_UCI_CONFIG_PATH : \    
-  (id == PKG_TRAFFIC_CONFIG) ? DEFAULT_UCI_CONFIG_PATH : \  
-  (id == PKG_UDPXY_CONFIG) ? DEFAULT_UCI_CONFIG_PATH : \  
-  (id == PKG_MESH_INFO_CONFIG) ? DEFAULT_UCI_CONFIG_PATH : \ 
-  (id == PKG_RID_SERVICE)? DEFAULT_UCI_CONFIG_PATH: \
+  (id == PKG_EASYCWMP_CONFIG) ? DEFAULT_UCI_CONFIG_PATH : \
+  (id == PKG_ANDLINK_CONFIG)  ? DEFAULT_UCI_CONFIG_PATH : \
+  (id == PKG_CMCC_DM_CONFIG)  ? DEFAULT_UCI_CONFIG_PATH : \
+  (id == PKG_ICWMP_CONFIG) ? DEFAULT_UCI_CONFIG_PATH : \
+  (id == PKG_STUN_CONFIG) ? DEFAULT_UCI_CONFIG_PATH : \
+  (id == PKG_SCH_CONFIG) ? DEFAULT_UCI_CONFIG_PATH : \
+  (id == PKG_WANDUCK_CONFIG) ? DEFAULT_UCI_CONFIG_PATH : \
+  (id == PKG_TRAFFIC_CONFIG) ? DEFAULT_UCI_CONFIG_PATH : \
+  (id == PKG_UDPXY_CONFIG) ? DEFAULT_UCI_CONFIG_PATH : \
+  (id == PKG_MESH_INFO_CONFIG) ? DEFAULT_UCI_CONFIG_PATH : \
+  (id == PKG_ROCKSPACE_CONFIG) ? DEFAULT_UCI_CONFIG_PATH : \
+  (id == PKG_CSTE_SUB_CONFIG) ? DEFAULT_UCI_CONFIG_PATH : \
+  (id == PKG_WAN_MODEM_CONFIG) ? DEFAULT_UCI_CONFIG_PATH : \
+  (id == PKG_CS_MODEM_CONFIG)? DEFAULT_UCI_CONFIG_PATH: \
+  (id == PKG_EOIP_CONFIG)? DEFAULT_UCI_CONFIG_PATH: \
+  (id == PKG_TUNNEL_CONFIG)? DEFAULT_UCI_CONFIG_PATH: \
+  (id == PKG_WAN_DEFAULT_CONFIG)? DEFAULT_UCI_CONFIG_PATH: \
+  (id == PKG_DTU_CONFIG)? DEFAULT_UCI_CONFIG_PATH: \
+  (id == PKG_IOT_CONFIG)? DEFAULT_UCI_CONFIG_PATH: \
+  (id == PKG_ROUTER_QUAGGA_CONFIG)? DEFAULT_UCI_CONFIG_PATH: \
+  (id == PKG_VRRP_CONFIG)? DEFAULT_UCI_CONFIG_PATH: \
  	DEFAULT_UCI_CONFIG_PATH)
-
 
 #define IS_PKG_CAN_CACHE(id) ((id == PKG_UNDEFINE)? 0 : 1)
 
@@ -248,8 +283,6 @@ struct cs_uci_get_context {
 	long ctx_lastupdate;
 	long ctx_lastaccess;
 };
-
-
 
 /* Function declaration */
 
@@ -308,8 +341,7 @@ struct cs_uci_get_context* cs_uci_get_uci_context_nla(unsigned char package, con
 
 void clean_uci_context(struct uci_context* ctx);
 
-int cs_uci_force_refresh_context(unsigned char package) ;
-
+int cs_uci_force_refresh_context(unsigned char package);
 
 #endif
 
